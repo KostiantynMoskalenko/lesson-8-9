@@ -1,0 +1,44 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mlflow-postgres
+  namespace: infra-tools
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  destination:
+    namespace: mlflow
+    server: "https://kubernetes.default.svc"
+  source:
+    repoURL: "https://charts.bitnami.com/bitnami"
+    chart: postgresql
+    targetRevision: 15.5.38
+    helm:
+      valuesObject:
+        image:
+          registry: docker.io
+          repository: bitnamilegacy/postgresql
+          tag: 16.4.0-debian-12-r19
+
+        auth:
+          username: mlflow
+          password: mlflowpass
+          database: mlflow
+          postgresPassword: postgrespass
+
+        architecture: standalone
+
+        primary:
+          persistence:
+            enabled: false
+          service:
+            ports:
+              postgresql: 5432
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

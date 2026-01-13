@@ -1,0 +1,59 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mlflow
+  namespace: infra-tools
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  destination:
+    namespace: mlflow
+    server: "https://kubernetes.default.svc"
+  source:
+    repoURL: "https://community-charts.github.io/helm-charts"
+    chart: mlflow
+    targetRevision: 1.8.1
+    helm:
+      valuesObject:
+        service:
+          type: ClusterIP
+          port: 5000
+
+        backendStore:
+          databaseMigration: true
+          databaseConnectionCheck: true
+          postgres:
+            enabled: true
+            host: mlflow-postgres-postgresql.mlflow.svc.cluster.local
+            port: 5432
+            database: mlflow
+            user: mlflow
+            password: mlflowpass
+
+        # Без MinIO/S3: артефакты храним локально в pod (emptyDir)
+        # Важно: без PVC артефакты пропадут при пересоздании pod
+        extraVolumes:
+          - name: mlflow-data
+            emptyDir: {}
+
+        extraVolumeMounts:
+          - name: mlflow-data
+            mountPath: /mlflow/data
+
+        artifactRoot:
+          proxiedArtifactStorage: true
+          defaultArtifactsDestination: /mlflow/data/mlartifacts
+
+        extraFlags:
+          - serveArtifacts
+
+        ingress:
+          enabled: false
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
