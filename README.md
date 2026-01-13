@@ -1,134 +1,87 @@
-# ArgoCD + MLflow GitOps Deployment
+# MLflow Experiments Tracking with ArgoCD, PostgreSQL and Prometheus PushGateway
 
-## Загальна послідовність виконнаня роботи
+This project demonstrates ML experiment tracking with MLflow, automatic model selection, and exporting experiment metrics via Prometheus PushGateway, deployed declaratively using ArgoCD.
 
-1. Через Terraform розгортається ArgoCD в існуючому EKS-кластері
-2. Створюється окремий Git-репозиторій goit-argo для GitOps
-3. Через Git створюються namespace application та infra-tools
-4. Деплоїться тестовий застосунок nginx для перевірки GitOps
-5. Після цього створюється Application для MLflow
-6. Кластер автоматично підтягує зміни з Git
+## Preconditions
+The clustr created on previos steps. See https://github.com/KostiantynMoskalenko/lesson-5-6
+ArgoCD will watch to lesson-5-6/mlops-experiments/argocd/applications
+Deployment and configuration files placed in https://github.com/KostiantynMoskalenko/lesson-8-9/argocd
 
-
-## 0. Структура Terraform для ArgoCD
-Структура terraform:
+## MLflow Deployment with ArgoCD on EKS:
 ```
-terraform/
-└──	argocd/
-		├── main.tf
-		├── variables.tf
-		├── provider.tf
-		├── outputs.tf
-		├── terraform.tf
-		├── backend.tf
-		└── values/
-		    └── argocd-values.yaml
+cd argocd
 ```
 
-
-## 1. Ініціалізація Terraform для ArgoCD
+## Terrafrm initialization for ArgoCD:
 ```
-cd terraform/argocd
-terraform init -reconfigure
-terraform plan
-```
-
-
-
-## 2. Деплой ArgoCD через Terraform
-```
-terraform apply
+   terraform init
+   terraform plan
+   terraform apply
 ```
 
+## Pods checkinf:
 
-
-## 3. Перевірка pod-ів ArgoCD
 ```
 kubectl get pods -n infra-tools
 ```
 
+## Add necessary changes in "main.tf" file
+Start from "# Bootstrap GitOps repo (ArgoCD will watch in /applications)....." and below in "main.tf" file.
 
 
-## 4. Отримання паролю для входу в UI ArgoCD
-```
-kubectl -n infra-tools get secret argocd-initial-admin-secret \
-  -o jsonpath="{.data.password}" | base64 -d && echo
-```
+## Update and deploy terrafom:
 
-
-
-## 5. Відкриття ArgoCD UI через port-forward
-```
-kubectl port-forward svc/argocd-server -n infra-tools 8080:80
-```
-Після цього UI доступний за адресою: http://localhost:8080
-
-
-## 6. Створення файлів для майбутньої Git (GitOps) інфраструктури
-Структура репозиторію goit-argo:
-```
-namespaces/
-├── application/
-│   ├── ns.yaml
-│   └── nginx.yaml
-└── infra-tools/
-    └── ns.yaml
-```
-Пушимо зміни у віддалений репозиторій:
-```
-git add .
-git commit -m "Add namespaces structure for GitOps"
-git push
-```
-
-
-## 7. Готуємо Terraform під Argo CD, щоб він дивився на namespace
-### Додали додаткову конфігурацію
- - у файл variables.tf: app_repo_url та app_repo_branch
- - у файл main.tf: прописали сканувати репозиторії у "namespaces/*"
-
-### Підтягнули зміни до кластера 
 ```
 terraform init -reconfigure  
+terraform plan
 terraform apply
 ```
 
-### Оновлення стану ApplicationSet
-```
-kubectl -n infra-tools annotate applicationset namespaces-appset \
-argocd.argoproj.io/application-set-refresh=force --overwrite
-```
+## Check applications for every folder:
 
-
-## 8. Перевірка Applications від ApplicationSet
 ```
 kubectl get applications -n infra-tools
 ```
 
+## Access getting for ArgoCD UI:
+1. Get password:
+   ```
+   $encodedPassword = kubectl -n infra-tools get secret argocd-initial-admin-secret -o jsonpath='{.data.password}'
+   [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encodedPassword))
+   ```
+2. Port forwarding:
+   ```   
+   kubectl port-forward svc/argocd-server -n infra-tools 8080:80
+   ```
+3. Open `http://localhost:8080` link in browser, log in with `admin` and the password from the step 1.
 
-## 9. Додавання ArgoCD Application для MLflow у Git
-Створюємо і додаємо файл на віддалений репозиторій для постійних оновлень:
+
+## Access getting for MlFlow UI:
+
+1. Port Forwarding:
 ```
-git add application.yaml
-git commit -m "Add MLflow ArgoCD Application"
-git push
-```
-
-
-## 10. Перевірка стану додатка
-У UI інтерфейсі. 
-
-## 11. Перевірка pod-ів MLflow
-```
-kubectl get pods -n application
-```
-
-
-## 12. Перекидання MLflow через port-forward для доступу через UI
-```
-kubectl port-forward svc/mlflow -n application 5000:5000
+kubectl -n mlflow port-forward svc/mlflow 5000:5000
 ```
 
+2. Open http://localhost:5000/ link in browser.
 
-## 13. Перегляд Applications у UI ArgoCD
-У UI інтерфейсі. 
+
+There are screenshots with application stages in Argo UI console (localhost:8080) and MlFlow console (localhost:5000):
+https://github.com/KostiantynMoskalenko/lesson-8-9/screens/
+
+
+Run Experiments (local execution)
+
+Prepare Python environment:
+```
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+Run training and metric push:
+```
+export MLFLOW_TRACKING_URI="http://localhost:5000"
+export PUSHGATEWAY_URL="http://localhost:9091"
+python train_and_push.py
+```
+
